@@ -1,0 +1,29 @@
+{
+    "url_mapping": [
+        {
+            "source_url": "https://servicehub.amadeus.com/c/portal/view-solution/879738928/travel-management-system-locations",
+            "file_name": "cytric locations download 2.pdf",
+            "display_name": "Locations"
+        },
+        {
+            "source_url": "https://servicehub.amadeus.com/c/portal/view-solution/879738896/travel-management-system-divisions",
+            "file_name": "divisions-cytric.pdf",
+            "display_name": "Divisions"
+        },
+        {
+            "source_url": "https://servicehub.amadeus.com/c/portal/view-solution/879742137/travel-management-system-trip-purpose-definition",
+            "file_name": "Trip Purpose Definition 1.pdf",
+            "display_name": "Trip Purpose Definition"
+        },
+        {
+            "source_url": "https://servicehub.amadeus.com/c/portal/view-solution/879742155/travel-management-system-trip-purpose-sets-administration",
+            "file_name": "trip_purpose_sets_administration 1.pdf",
+            "display_name": "Trip Purpose Sets Administration"
+        },
+        {
+            "source_url": "https://servicehub.amadeus.com/c/portal/view-solution/879742121/travel-management-system-trip-purpose-rules-administration",
+            "file_name": "Trip Purpose Rules Administration 1.pdf",
+            "display_name": "Trip Purposes Rules Administration"
+        }
+    ]
+}

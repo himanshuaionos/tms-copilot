@@ -1,11 +1,16 @@
 # app/api_main.py
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Dict, Optional
 import os
 import sys
 from pinecone import Pinecone, ServerlessSpec
 import uvicorn
+from fastapi.responses import StreamingResponse
+import json
+from db import init_db, get_db, create_conversation, add_message, add_source, Conversation, Message, Source
+from sqlalchemy.orm import Session
+from starlette.responses import StreamingResponse as StarletteStreamingResponse
 
 # Add the parent directory to the path to import utils
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -32,6 +37,7 @@ class ChatRequest(BaseModel):
     context_window: Optional[int] = 5
     max_history: Optional[int] = 10
     include_sources: Optional[bool] = False
+    conversation_id: Optional[int] = None
 
 class SourceDocument(BaseModel):
     text: str
@@ -41,6 +47,7 @@ class ChatResponse(BaseModel):
     response: str
     sources: Optional[List[SourceDocument]] = []
     chat_history: List[ChatMessage]
+    conversation_id: Optional[int] = None
 
 class HealthResponse(BaseModel):
     status: str
@@ -97,6 +104,7 @@ async def startup_event():
     """Initialize components on startup."""
     global embedding_manager, vector_store, llm_manager
     try:
+        init_db()
         embedding_manager, vector_store, llm_manager = initialize_components()
         print("✅ All components initialized successfully")
     except Exception as e:
@@ -115,7 +123,7 @@ async def health_check():
         message="RAG Chatbot API is running successfully"
     )
 
-# Main chat endpoint
+# Main chat endpoint (non-streaming, legacy)
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """Main chat endpoint for processing user queries."""
@@ -126,6 +134,16 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=503, detail="Service components not initialized")
     
     try:
+        db = next(get_db())
+        # Create or get conversation
+        if request.conversation_id:
+            conversation_id = request.conversation_id
+        else:
+            conv = create_conversation(db)
+            conversation_id = conv.id
+        # Store user message
+        user_msg = add_message(db, conversation_id, "user", request.message)
+        
         # Generate embedding for the user query
         query_embedding = embedding_manager.generate_embeddings([request.message])[0]
         
@@ -155,6 +173,9 @@ async def chat(request: ChatRequest):
             chat_history
         )
         
+        # Store assistant message
+        assistant_msg = add_message(db, conversation_id, "assistant", response)
+        
         # Prepare sources if requested
         sources = []
         if request.include_sources:
@@ -163,6 +184,8 @@ async def chat(request: ChatRequest):
                     text=doc["text"],
                     metadata=doc.get("metadata", {})
                 ))
+                # Store source in DB
+                add_source(db, assistant_msg.id, doc["text"], doc.get("metadata", {}))
         
         # Update chat history with the new exchange
         updated_chat_history = chat_history + [
@@ -173,9 +196,61 @@ async def chat(request: ChatRequest):
         return ChatResponse(
             response=response,
             sources=sources if request.include_sources else [],
-            chat_history=updated_chat_history
+            chat_history=updated_chat_history,
+            conversation_id=conversation_id
         )
         
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing chat request: {str(e)}")
+
+# Streaming chat endpoint
+@app.post("/chat/stream")
+async def chat_stream(request: ChatRequest):
+    """Streaming chat endpoint for processing user queries."""
+    global embedding_manager, vector_store, llm_manager
+    if embedding_manager is None or vector_store is None or llm_manager is None:
+        raise HTTPException(status_code=503, detail="Service components not initialized")
+
+    try:
+        db = next(get_db())
+        # Create or get conversation
+        if request.conversation_id:
+            conversation_id = request.conversation_id
+        else:
+            conv = create_conversation(db)
+            conversation_id = conv.id
+        # Store user message
+        user_msg = add_message(db, conversation_id, "user", request.message)
+        query_embedding = embedding_manager.generate_embeddings([request.message])[0]
+        relevant_docs = vector_store.search(
+            request.message,
+            query_embedding,
+            k=request.context_window
+        )
+        chat_history = [
+            {"role": msg.role, "content": msg.content}
+            for msg in request.chat_history
+        ]
+        if len(chat_history) > request.max_history:
+            chat_history = chat_history[-request.max_history:]
+
+        def token_stream():
+            response_accum = ""
+            for token in llm_manager.stream_response(
+                request.message,
+                relevant_docs,
+                chat_history
+            ):
+                response_accum += token
+                yield token
+            # Store assistant message and sources after streaming is done
+            assistant_msg = add_message(db, conversation_id, "assistant", response_accum)
+            for doc in relevant_docs:
+                add_source(db, assistant_msg.id, doc["text"], doc.get("metadata", {}))
+        
+        # Set conversation_id in response header so frontend can persist it
+        headers = {"conversation_id": str(conversation_id)}
+        return StarletteStreamingResponse(token_stream(), media_type="text/plain", headers=headers)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing chat request: {str(e)}")
 
@@ -223,6 +298,36 @@ async def get_system_info():
         ])
     }
 
+# Endpoint to fetch conversation history by conversation_id
+@app.get("/conversation/{conversation_id}")
+async def get_conversation_history(conversation_id: int):
+    db = next(get_db())
+    conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    messages = db.query(Message).filter(Message.conversation_id == conversation_id).order_by(Message.created_at).all()
+    result = {
+        "conversation_id": conv.id,
+        "user_id": conv.user_id,
+        "created_at": conv.created_at,
+        "updated_at": conv.updated_at,
+        "messages": []
+    }
+    for msg in messages:
+        msg_dict = {
+            "id": msg.id,
+            "role": msg.role,
+            "content": msg.content,
+            "created_at": msg.created_at,
+        }
+        if msg.role == "assistant":
+            sources = db.query(Source).filter(Source.message_id == msg.id).all()
+            msg_dict["sources"] = [
+                {"text": src.text, "metadata": src.meta} for src in sources
+            ]
+        result["messages"].append(msg_dict)
+    return result
+
 # Root endpoint
 @app.get("/")
 async def root():
@@ -243,8 +348,8 @@ if __name__ == "__main__":
     # Run the server
     uvicorn.run(
         "api_main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
+        host="172.31.3.215",
+        port=8505,
+        reload=False,
         log_level="info"
     )
