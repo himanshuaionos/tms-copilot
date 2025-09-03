@@ -392,9 +392,7 @@ if st.session_state.show_feedback and not st.session_state.feedback_submitted:
         
         st.multiselect(
             "What specifically did you like about the response?",
-            ["Accuracy of information", "Completeness of answer", 
-            "Clear formatting/organization", "Relevant resources provided", 
-            "Quick retrieval", "Other"],
+            ["Completely correct response", "Correct response with minor omissions", "Other"],
             key="liked_aspects"
         )
         
@@ -433,8 +431,8 @@ if st.session_state.show_feedback and not st.session_state.feedback_submitted:
 
         st.multiselect(
             "Please select your feedback type:",
-            ["Missing information", "Incorrect information", "Response too complex",
-            "Response not relevant to query", "System too slow", "Other"],
+            ["Incorrect response", "Response is partially correct", "Response was incomplete",
+            "Response is very verbose ", "Information provided is outdated", "Other"],
             key="issues"
         )
         
