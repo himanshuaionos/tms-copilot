@@ -1,4 +1,7 @@
 # app/api_main.py
+
+import re
+
 from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Dict, Optional
@@ -8,8 +11,11 @@ from pinecone import Pinecone, ServerlessSpec
 import uvicorn
 from fastapi.responses import StreamingResponse
 import json
-from db import init_db, get_db, create_conversation, add_message, add_source, Conversation, Message, Source
-from sqlalchemy.orm import Session
+
+from db import Feedback, init_db, get_db, create_conversation, add_message, add_source, add_feedback, Conversation, Message, Source
+from sqlalchemy import and_
+from sqlalchemy.orm import Session, aliased
+
 from starlette.responses import StreamingResponse as StarletteStreamingResponse
 
 # Add the parent directory to the path to import utils
@@ -39,6 +45,21 @@ class ChatRequest(BaseModel):
     include_sources: Optional[bool] = False
     conversation_id: Optional[int] = None
 
+class FeedbackRequest(BaseModel):
+    user_id: int
+    username: str
+    user_full_name: str
+    feedback_type: str
+    conversation_id: int
+    time_saved: str
+    rating: int
+    recommend: str
+    liked_aspects: str
+    other_liked: str
+    improvement_suggestions: str
+    issues: str
+    other_feedback: str
+
 class SourceDocument(BaseModel):
     text: str
     metadata: Dict
@@ -48,6 +69,9 @@ class ChatResponse(BaseModel):
     sources: Optional[List[SourceDocument]] = []
     chat_history: List[ChatMessage]
     conversation_id: Optional[int] = None
+
+class FeedbackResponse(BaseModel):
+    message: str
 
 class HealthResponse(BaseModel):
     status: str
@@ -254,6 +278,145 @@ async def chat_stream(request: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing chat request: {str(e)}")
 
+# Endpoint to save feedback
+@app.post("/chat/feedback", response_model=FeedbackResponse)
+async def save_feedback(request: FeedbackRequest):
+    """Save feedback to the database."""
+    try:
+        db = next(get_db())
+        
+        # Add feedback to the database
+        add_feedback(
+            db,
+            request.user_id,
+            request.username,
+            request.user_full_name,
+            request.feedback_type,
+            request.conversation_id,
+            request.time_saved,
+            request.rating,
+            request.recommend,
+            request.liked_aspects,
+            request.other_liked,
+            request.improvement_suggestions,
+            request.issues,
+            request.other_feedback
+        )
+        
+        return FeedbackResponse(
+            message="Feedback saved successfully"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error saving feedback: {str(e)}")
+
+
+# Endpoint to retrieve the feedback
+@app.get("/chat/feedback/list")
+async def get_feedback():
+    try:
+        db = next(get_db())
+
+        UserMessage = aliased(Message)
+        AssistantMessage = aliased(Message)
+        feedbacks_db = db.query(
+            Feedback,
+            UserMessage.content.label('query'),
+            AssistantMessage.content.label('response')
+        ).join(
+            UserMessage,
+            and_(
+                Feedback.conversation_id == UserMessage.conversation_id,
+                UserMessage.role == 'user'
+            )
+        ).join(
+            AssistantMessage,
+            and_(
+                Feedback.conversation_id == AssistantMessage.conversation_id,
+                AssistantMessage.role == 'assistant'
+            )
+        ).limit(1000).all()
+        if not feedbacks_db:
+            raise HTTPException(status_code=404, detail="No feedback found")
+
+        feedbacks = list()
+
+        for feedback_row in feedbacks_db:
+            feedback_obj = feedback_row[0]
+            query = feedback_row.query
+            response = feedback_row.response
+
+            feedback = {
+                "user_id" : feedback_obj.user_id,
+                "username" : feedback_obj.username,
+                "user_full_name" : feedback_obj.user_full_name,
+                "feedback_type" : feedback_obj.feedback_type,
+                "query": query,
+                "response": response,
+                "time_saved" : feedback_obj.time_saved,
+                "rating" : feedback_obj.rating,
+                "recommend" : feedback_obj.recommend,
+                "liked_aspects" : feedback_obj.liked_aspects,
+                "other_liked" : feedback_obj.other_liked,
+                "improvement_suggestions" : feedback_obj.improvement_suggestions,
+                "issues" : feedback_obj.issues,
+                "other_feedback" : feedback_obj.other_feedback,
+                "timestamp": feedback_obj.timestamp
+            }
+
+            feedbacks.append(feedback)
+        return feedbacks
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading feedback: {str(e)}")
+
+
+# Endpoint to retrieve the response
+@app.get("/chat/reponse/list")
+async def get_response():
+    try:
+        db = next(get_db())
+
+        UserMessage = aliased(Message)
+        AssistantMessage = aliased(Message)
+        feedbacks_db = db.query(
+            Feedback.user_id,
+            Feedback.username,
+            Feedback.user_full_name,
+            Feedback.timestamp,
+            UserMessage.content.label('query'),
+            AssistantMessage.content.label('response')
+        ).join(
+            UserMessage,
+            and_(
+                Feedback.conversation_id == UserMessage.conversation_id,
+                UserMessage.role == 'user'
+            )
+        ).join(
+            AssistantMessage,
+            and_(
+                Feedback.conversation_id == AssistantMessage.conversation_id,
+                AssistantMessage.role == 'assistant'
+            )
+        ).limit(1000).all()
+        if not feedbacks_db:
+            raise HTTPException(status_code=404, detail="No response found")
+
+        feedbacks = list()
+
+        for feedback_row in feedbacks_db:
+            feedback = {
+                "user_id" : feedback_row.user_id,
+                "username" : feedback_row.username,
+                "user_full_name" : feedback_row.user_full_name,
+                "query": feedback_row.query,
+                "response": feedback_row.response,
+                "query_time": feedback_row.timestamp
+            }
+
+            feedbacks.append(feedback)
+        return feedbacks
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading response: {str(e)}")
+
 # Endpoint to search documents only
 @app.post("/search")
 async def search_documents(query: str, k: int = 5):
@@ -282,6 +445,7 @@ async def search_documents(query: str, k: int = 5):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error searching documents: {str(e)}")
+
 
 # Endpoint to get system information
 @app.get("/info")
@@ -338,11 +502,13 @@ async def root():
         "endpoints": {
             "health": "/health",
             "chat": "/chat",
+            "feedback": "/chat/feedback",
             "search": "/search",
             "info": "/info",
             "docs": "/docs"
         }
     }
+
 
 if __name__ == "__main__":
     # Run the server

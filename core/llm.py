@@ -11,6 +11,10 @@ from utils.helpers import format_chat_history
 import json
 import re
 from urllib.parse import urlparse
+from .track import langsmith_integration
+
+# LangSmith Integration.
+langsmith_integration()
 
 class StreamHandler(BaseCallbackHandler):
     def __init__(self, container):
