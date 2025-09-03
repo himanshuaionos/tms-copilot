@@ -27,11 +27,7 @@ st.set_page_config(
 )
 
 ## Adding customised avatar for the bot
-<<<<<<< HEAD
-assistant_avatar = Image.open("app/icon_tms.png") 
-=======
 assistant_avatar = None #Image.open("app/icon_tms.png") 
->>>>>>> 04769348975d273406f55105f939376498ccebf0
 
 def check_environment():
     """Check if all required environment variables are set."""
@@ -83,8 +79,6 @@ if "show_sources" not in st.session_state:
     st.session_state.show_sources = True
 if "conversation_id" not in st.session_state:
     st.session_state.conversation_id = None
-<<<<<<< HEAD
-=======
 if "show_feedback" not in st.session_state:
     st.session_state.show_feedback = False
 if "feedback_submitted" not in st.session_state:
@@ -93,18 +87,10 @@ if "feedback_positive" not in st.session_state:
     st.session_state.feedback_positive = False
 if "feedback_negative" not in st.session_state:
     st.session_state.feedback_negative = False
->>>>>>> 04769348975d273406f55105f939376498ccebf0
 
 st.title(config.APP_TITLE)
 st.markdown("Please don’t use any personal data. Note that responses are provided by a chatbot powered by Artificial Intelligence technology and not reviewed by humans. Therefore, the responses to your questions may not be accurate.")
 
-<<<<<<< HEAD
-# st.markdown("""
-# Get answers to all your TMS Cytric related queries.
-# """)
-
-st.markdown("Please don’t use any personal data. Note that responses are provided by a chatbot powered by Artificial Intelligence technology and not reviewed by humans. Therefore, the responses to your questions may not be accurate.")
-=======
 def on_yes_click():
     st.session_state.feedback_positive = True
     st.session_state.feedback_negative = False
@@ -181,7 +167,6 @@ def save_feedback(feedback_data):
         import traceback
         traceback.print_exc()
         print("Feedback saved to JSON file only.")
->>>>>>> 04769348975d273406f55105f939376498ccebf0
 
 
 # Add handlers for submit buttons
@@ -327,13 +312,8 @@ if user_input:
                 "conversation_id": st.session_state.conversation_id
             }
             # Log the payload for debugging
-<<<<<<< HEAD
-            #print("Payload being sent to API:", json.dumps(payload, indent=2))
-            api_url = "http://172.31.3.215:8505/chat/stream"
-=======
             print("Payload being sent to API:", json.dumps(payload, indent=2))
             api_url = "http://localhost:8000/chat/stream"
->>>>>>> 04769348975d273406f55105f939376498ccebf0
             response = requests.post(api_url, json=payload, stream=True, timeout=120)
             
             full_response = ""
@@ -342,21 +322,13 @@ if user_input:
                 if chunk:
                     full_response += chunk
                     response_placeholder.markdown(full_response)
-<<<<<<< HEAD
-            # After streaming the response and updating chat history, fetch and display sources if enabled
-            # print(full_response)
-=======
+
 
             # After streaming the response and updating chat history, fetch and display sources if enabled            
->>>>>>> 04769348975d273406f55105f939376498ccebf0
             st.session_state.chat_history.append({
                 "role": "assistant",
                 "content": full_response
             })
-<<<<<<< HEAD
-=======
-
->>>>>>> 04769348975d273406f55105f939376498ccebf0
             # Update conversation_id from API response header if present
             if "conversation_id" in response.headers:
                 st.session_state.conversation_id = int(response.headers["conversation_id"])
@@ -365,11 +337,8 @@ if user_input:
             # Fetch and display sources if enabled
             if st.session_state.show_sources and st.session_state.conversation_id:
                 try:
-<<<<<<< HEAD
-                    conv_url = f"http://172.31.3.215:8505/conversation/{st.session_state.conversation_id}"
-=======
+
                     conv_url = f"http://localhost:8000/conversation/{st.session_state.conversation_id}"
->>>>>>> 04769348975d273406f55105f939376498ccebf0
                     conv_resp = requests.get(conv_url, timeout=30)
                     if conv_resp.ok:
                         conv_data = conv_resp.json()
@@ -382,11 +351,9 @@ if user_input:
                         st.warning("Could not fetch sources for this response.")
                 except Exception as e:
                     st.warning(f"Error fetching sources: {e}")
-<<<<<<< HEAD
-=======
+
 
             st.session_state.show_feedback = True
->>>>>>> 04769348975d273406f55105f939376498ccebf0
         except Exception as e:
             st.error(f"An error occurred during query processing: {str(e)}")
             st.error("Full error details:")
