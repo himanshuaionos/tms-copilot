@@ -514,8 +514,8 @@ if __name__ == "__main__":
     # Run the server
     uvicorn.run(
         "api_main:app",
-        host="172.31.3.215",
-        port=8505,
-        reload=False,
+        host="0.0.0.0",
+        port=8503,
+        reload=True,
         log_level="info"
     )
