@@ -153,7 +153,7 @@ def save_feedback(feedback_data):
         
         # Log the payload for debugging
         print("Payload being sent to API:", json.dumps(feedback_payload, indent=2))
-        api_url = "http://localhost:8000/chat/feedback"
+        api_url = f"{config.API_BASE_URL}/chat/feedback"
         response = requests.post(api_url, json=feedback_payload)
         if response.ok:
             print("✅ Feedback saved to SQLite database successfully.")
@@ -313,7 +313,7 @@ if user_input:
             }
             # Log the payload for debugging
             print("Payload being sent to API:", json.dumps(payload, indent=2))
-            api_url = "http://localhost:8000/chat/stream"
+            api_url = f"{config.API_BASE_URL}/chat/stream"
             response = requests.post(api_url, json=payload, stream=True, timeout=120)
             
             full_response = ""
@@ -337,8 +337,7 @@ if user_input:
             # Fetch and display sources if enabled
             if st.session_state.show_sources and st.session_state.conversation_id:
                 try:
-
-                    conv_url = f"http://localhost:8000/conversation/{st.session_state.conversation_id}"
+                    conv_url = f"{config.API_BASE_URL}/conversation/{st.session_state.conversation_id}"
                     conv_resp = requests.get(conv_url, timeout=30)
                     if conv_resp.ok:
                         conv_data = conv_resp.json()
