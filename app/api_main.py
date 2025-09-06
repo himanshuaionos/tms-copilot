@@ -513,8 +513,8 @@ if __name__ == "__main__":
     # Run the server
     uvicorn.run(
         "api_main:app",
-        host="0.0.0.0",
-        port=8503,
+        host=config.API_HOST,
+        port=int(config.API_PORT),
         reload=True,
         log_level="info"
     )

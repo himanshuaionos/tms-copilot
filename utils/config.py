@@ -63,5 +63,10 @@ class Config:
     
     # Web scraping settings
     WEB_SCRAPING_DELAY = 1  # Delay between requests in seconds
+
+    # API settings
+    API_HOST = os.getenv("API_HOST")
+    API_PORT = os.getenv("API_PORT")
+    API_BASE_URL = os.getenv("API_BASE_URL")
     
 config = Config()
